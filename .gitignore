@@ -46,3 +46,4 @@ next-env.d.ts
 
 # Intermediate image-generation sources
 /public/sprites/*-source.png
+/public/foregrounds/*-source.png
