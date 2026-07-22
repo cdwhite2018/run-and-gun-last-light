@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./characters.css";
 
 export const metadata: Metadata = {
   title: "Run & Gun: Last Light",
