@@ -69,6 +69,24 @@
 .mobile-controls .jump-control { border-color: #f4bd50; }
 .mobile-controls .depth-controls { display: flex; flex-direction: column; gap: 3px; }
 .mobile-controls .depth-controls button { width: 31px; height: 31px; font-size: 10px; }
+.joystick {
+  position: relative;
+  width: 118px;
+  height: 118px;
+  border: 2px solid #ffffff80;
+  border-radius: 50%;
+  background: radial-gradient(circle, #202b42cc 0 31%, #0c1425d9 33% 67%, #28344bbd 69% 100%);
+  box-shadow: inset 0 0 22px #000b, 0 6px 18px #0009;
+  touch-action: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.joystick::before,.joystick::after { content:""; position:absolute; background:#ffffff1c; pointer-events:none; }
+.joystick::before { width:2px; height:78px; left:57px; top:18px; }
+.joystick::after { width:78px; height:2px; left:18px; top:57px; }
+.joystick-thumb { position:absolute; z-index:2; left:33px; top:33px; width:48px; height:48px; border:2px solid #ffffffa8; border-radius:50%; background:radial-gradient(circle at 35% 28%,#8292ad,#34415a 48%,#171f30); box-shadow:0 5px 12px #000b,inset 0 2px 6px #fff4; pointer-events:none; will-change:transform; }
+.joystick-axis { position:absolute; z-index:1; color:#ffffff80; font:900 11px Arial,sans-serif; pointer-events:none; }
+.joystick-axis.up { top:5px; left:53px; }.joystick-axis.right { right:6px; top:51px; }.joystick-axis.down { bottom:5px; left:53px; }.joystick-axis.left { left:6px; top:51px; }
 
 .portrait.ninja { background: radial-gradient(circle at 50% 32%, #4d3041, #121824 68%); }
 .portrait.operator { background: radial-gradient(circle at 50% 32%, #455447, #141b1d 68%); }

@@ -30,6 +30,9 @@ export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<number>(0);
   const keys = useRef<Record<string, boolean>>({});
+  const joystickRef = useRef<HTMLDivElement>(null);
+  const joystickThumbRef = useRef<HTMLSpanElement>(null);
+  const joystickPointerRef = useRef<number|null>(null);
   const audioRef = useRef<AudioEngine|null>(null);
   const audioLoadingRef = useRef<Promise<AudioEngine>|null>(null);
   const mutedRef = useRef(false);
@@ -70,6 +73,8 @@ export default function Game() {
   }, []);
 
   const touchKey = (code: string, pressed: boolean) => { keys.current[code] = pressed; };
+  const moveJoystick = (clientX:number,clientY:number) => {const base=joystickRef.current,thumb=joystickThumbRef.current;if(!base||!thumb)return;const rect=base.getBoundingClientRect(),rawX=clientX-(rect.left+rect.width/2),rawY=clientY-(rect.top+rect.height/2),distance=Math.hypot(rawX,rawY),limit=36,scale=distance>limit?limit/distance:1,dx=rawX*scale,dy=rawY*scale,deadZone=9;thumb.style.transform=`translate(${dx}px,${dy}px)`;keys.current.KeyA=dx<-deadZone;keys.current.KeyD=dx>deadZone;keys.current.KeyW=dy<-deadZone;keys.current.KeyS=dy>deadZone;};
+  const releaseJoystick = () => {joystickPointerRef.current=null;if(joystickThumbRef.current)joystickThumbRef.current.style.transform="translate(0,0)";["KeyA","KeyD","KeyW","KeyS"].forEach(code=>{keys.current[code]=false;});};
 
   useEffect(() => {
     if (mode !== "playing") return;
@@ -111,7 +116,7 @@ export default function Game() {
 
     const drawHero = (x: number, y: number, facing: number, walkPhase: number) => {
       ctx.save();ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(x+20,y+61,28,7,0,0,Math.PI*2);ctx.fill();ctx.restore();
-      const index=HEROES.findIndex(h=>h.id===hero.id),sprite=heroSprites[index];if(sprite.complete&&sprite.naturalWidth){const moving=Boolean(keys.current.KeyA||keys.current.KeyD||keys.current.KeyW||keys.current.KeyS||keys.current.ArrowLeft||keys.current.ArrowRight||keys.current.ArrowUp||keys.current.ArrowDown),running=moving&&Boolean(keys.current.ShiftLeft||keys.current.ShiftRight);ctx.save();ctx.translate(x+(facing<0?44:0)+20,y+8);ctx.rotate(running ? .035*facing : 0);ctx.scale(facing,1);if(moving&&heroWalkReady){const cellW=heroWalkAtlas.width/4,cellH=heroWalkAtlas.height/4,frame=Math.floor(walkPhase/(Math.PI/2))%4;ctx.drawImage(heroWalkAtlas,frame*cellW,index*cellH,cellW,cellH,-43,-55,98,108);}else{const breath=Math.sin(performance.now()/420)*.006;ctx.scale(1,1+breath);ctx.drawImage(sprite,-41,-55,94,108);}ctx.restore();return;}
+      const index=HEROES.findIndex(h=>h.id===hero.id),sprite=heroSprites[index];if(sprite.complete&&sprite.naturalWidth){const moving=Boolean(keys.current.KeyA||keys.current.KeyD||keys.current.KeyW||keys.current.KeyS||keys.current.ArrowLeft||keys.current.ArrowRight||keys.current.ArrowUp||keys.current.ArrowDown),running=moving&&Boolean(keys.current.ShiftLeft||keys.current.ShiftRight);ctx.save();ctx.translate(x+(facing<0?44:0)+20,y+8);ctx.rotate(running ? .035*facing : 0);ctx.scale(facing,1);if(heroWalkReady){const cellW=heroWalkAtlas.width/4,cellH=heroWalkAtlas.height/4,frame=moving?Math.floor(walkPhase/(Math.PI/2))%4:0;ctx.drawImage(heroWalkAtlas,frame*cellW,index*cellH,cellW,cellH,-43,-55,98,108);}else{ctx.drawImage(sprite,-41,-55,94,108);}ctx.restore();return;}
       ctx.save(); ctx.translate(x+(facing<0?42:0), y); ctx.scale(facing,1);
       ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(18, 45, 25, 6, 0, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = hero.color; ctx.fillRect(7, 4, 24, 32);
@@ -163,7 +168,7 @@ export default function Game() {
       ctx.restore();}
       if(pathAtlasReady){const crops=[[0,200,762,306],[774,207,762,299],[0,660,762,344],[774,653,762,351]][levelIndex],tileWidth=WIDTH,pathShift=-(state.camera%tileWidth);for(let tileX=pathShift-tileWidth;tileX<WIDTH+tileWidth;tileX+=tileWidth)ctx.drawImage(pathAtlas,crops[0],crops[1],crops[2],crops[3],tileX,340,tileWidth,200);if(levelIndex===2){const pulse=.42+(Math.sin(time*5)+1)*.25;ctx.fillStyle=`rgba(255,48,30,${pulse})`;for(let tileX=pathShift-tileWidth;tileX<WIDTH+tileWidth;tileX+=tileWidth)for(let localX=50;localX<tileWidth;localX+=200){ctx.beginPath();ctx.arc(tileX+localX,358,4,0,Math.PI*2);ctx.fill();}}if(levelIndex===3){ctx.shadowColor="#ff572b";ctx.shadowBlur=10;ctx.strokeStyle=`rgba(255,83,36,${.35+(Math.sin(time*2)+1)*.12})`;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(0,395);ctx.lineTo(WIDTH,395);ctx.stroke();ctx.shadowBlur=0;}}
       for(const o of state.obstacles){const x=o.x-state.camera;if(x>-100&&x<WIDTH+100)drawObstacle(o,x);}
-      for(const e of state.enemies){if(!e.alive)continue;const x=e.x-state.camera;if(x>-80&&x<WIDTH+80){ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(x+18,e.depth+3,25,7,0,0,Math.PI*2);ctx.fill();const sprite=enemySprites[e.variant];if(sprite.complete&&sprite.naturalWidth){ctx.save();ctx.translate(x+(e.facing<0?38:0)+18,e.y+3);ctx.rotate(e.moving ? .022*e.facing : 0);ctx.scale(e.facing,1);if(e.moving&&enemyWalkReady){const cellW=enemyWalkAtlas.width/4,cellH=enemyWalkAtlas.height/4,frame=Math.floor(e.walkPhase/(Math.PI/2))%4;ctx.drawImage(enemyWalkAtlas,frame*cellW,e.variant*cellH,cellW,cellH,-38,-45,86,90);}else{const breath=Math.sin(performance.now()/440+e.squad)*.005;ctx.scale(1,1+breath);ctx.drawImage(sprite,-36,-44,82,88);}ctx.restore();}else{ctx.save();ctx.translate(x+(e.facing<0?34:0),e.y);ctx.scale(e.facing,1);ctx.fillStyle="#351e29";ctx.fillRect(0,0,34,43);ctx.fillStyle="#8cffcf";ctx.fillRect(5,8,7,4);ctx.fillRect(22,8,7,4);ctx.fillStyle="#bf4859";ctx.fillRect(28,19,21,7);ctx.restore();}}}
+      for(const e of state.enemies){if(!e.alive)continue;const x=e.x-state.camera;if(x>-80&&x<WIDTH+80){ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(x+18,e.depth+3,25,7,0,0,Math.PI*2);ctx.fill();const sprite=enemySprites[e.variant];if(sprite.complete&&sprite.naturalWidth){ctx.save();ctx.translate(x+(e.facing<0?38:0)+18,e.y+3);ctx.rotate(e.moving ? .022*e.facing : 0);ctx.scale(e.facing,1);if(enemyWalkReady){const cellW=enemyWalkAtlas.width/4,cellH=enemyWalkAtlas.height/4,frame=e.moving?Math.floor(e.walkPhase/(Math.PI/2))%4:0;ctx.drawImage(enemyWalkAtlas,frame*cellW,e.variant*cellH,cellW,cellH,-38,-45,86,90);}else{ctx.drawImage(sprite,-36,-44,82,88);}ctx.restore();}else{ctx.save();ctx.translate(x+(e.facing<0?34:0),e.y);ctx.scale(e.facing,1);ctx.fillStyle="#351e29";ctx.fillRect(0,0,34,43);ctx.fillStyle="#8cffcf";ctx.fillRect(5,8,7,4);ctx.fillRect(22,8,7,4);ctx.fillStyle="#bf4859";ctx.fillRect(28,19,21,7);ctx.restore();}}}
       for(const b of state.bullets){ctx.fillStyle=b.enemy?"#ff5973":"#ffd15b";ctx.fillRect(b.x-state.camera,b.y,b.enemy?9:14,4);}
       for(const p of state.particles){ctx.globalAlpha=p.life/24;ctx.fillStyle=p.color;ctx.fillRect(p.x-state.camera,p.y,4,4);}ctx.globalAlpha=1;
       drawHero(state.player.x-state.camera,state.player.y,state.player.facing,state.player.walkPhase);
@@ -206,9 +211,9 @@ export default function Game() {
       <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="Side-scrolling shooter game" />
       {mode==="playing"&&isMobile&&<div className="mobile-controls" aria-label="Touch game controls">
         <div className="move-controls">
-          <button aria-label="Move left" onPointerDown={e=>{e.preventDefault();touchKey("KeyA",true)}} onPointerUp={()=>touchKey("KeyA",false)} onPointerCancel={()=>touchKey("KeyA",false)} onPointerLeave={()=>touchKey("KeyA",false)}>◀</button>
-          <span className="depth-controls"><button aria-label="Move toward background" onPointerDown={e=>{e.preventDefault();touchKey("KeyW",true)}} onPointerUp={()=>touchKey("KeyW",false)} onPointerCancel={()=>touchKey("KeyW",false)}>▲</button><button aria-label="Move toward foreground" onPointerDown={e=>{e.preventDefault();touchKey("KeyS",true)}} onPointerUp={()=>touchKey("KeyS",false)} onPointerCancel={()=>touchKey("KeyS",false)}>▼</button></span>
-          <button aria-label="Move right" onPointerDown={e=>{e.preventDefault();touchKey("KeyD",true)}} onPointerUp={()=>touchKey("KeyD",false)} onPointerCancel={()=>touchKey("KeyD",false)} onPointerLeave={()=>touchKey("KeyD",false)}>▶</button>
+          <div ref={joystickRef} className="joystick" role="application" aria-label="Movement joystick. Drag in any direction to move." tabIndex={0} onPointerDown={e=>{e.preventDefault();joystickPointerRef.current=e.pointerId;e.currentTarget.setPointerCapture(e.pointerId);moveJoystick(e.clientX,e.clientY)}} onPointerMove={e=>{if(joystickPointerRef.current===e.pointerId)moveJoystick(e.clientX,e.clientY)}} onPointerUp={e=>{if(joystickPointerRef.current===e.pointerId)releaseJoystick()}} onPointerCancel={releaseJoystick} onLostPointerCapture={releaseJoystick}>
+            <span className="joystick-axis up">▲</span><span className="joystick-axis right">▶</span><span className="joystick-axis down">▼</span><span className="joystick-axis left">◀</span><span ref={joystickThumbRef} className="joystick-thumb" />
+          </div>
         </div>
         <div className="action-controls">
           <button className="jump-control" aria-label="Jump or double jump" onPointerDown={e=>{e.preventDefault();touchKey("Space",true)}} onPointerUp={()=>touchKey("Space",false)} onPointerCancel={()=>touchKey("Space",false)}>JUMP</button>
