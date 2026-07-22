@@ -2,6 +2,10 @@
 
 A browser side-scrolling shooter with four selectable heroes.
 
+## Play online
+
+https://cdwhite2018.github.io/run-and-gun-last-light/
+
 ## Controls
 
 - `A` / `D` or arrows: move
@@ -20,6 +24,6 @@ npm run dev
 
 For a production build, run `npm run build`.
 
-## GitHub cloud build
+## GitHub Pages deployment
 
-Push this project to GitHub. The **Build game** workflow runs on pushes to `main`, pull requests, or manually from the **Actions** tab. Its `run-and-gun-build` artifact contains the finished build.
+Every push to `main` builds the static game and publishes it to GitHub Pages automatically.
