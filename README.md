@@ -9,7 +9,8 @@ https://cdwhite2018.github.io/run-and-gun-last-light/
 ## Controls
 
 - `A` / `D` or arrows: move
-- `W`, up arrow, or space: jump
+- `W` / `S` or up/down arrows: move through the depth lane
+- Space: jump and double jump
 - `F`, `J`, or left Ctrl: fire
 - Shift: sprint
 

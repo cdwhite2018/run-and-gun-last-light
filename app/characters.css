@@ -28,7 +28,7 @@
   filter: drop-shadow(0 5px 5px #0008);
   overflow: hidden;
 }
-.portrait.anime img { position: absolute; top: 0; width: 400%; height: 200%; max-width: none; object-fit: fill; }
+.portrait.anime img { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; object-fit: contain; image-rendering: auto; filter: drop-shadow(0 5px 4px #0008); }
 .portrait.anime::before,
 .portrait.anime::after,
 .portrait.anime i { display: none; }
@@ -67,6 +67,8 @@
 .mobile-controls button:active { transform: scale(.92); background: #ee4965dd; }
 .mobile-controls .fire-control { width: 76px; height: 76px; border-color: #ff7088; }
 .mobile-controls .jump-control { border-color: #f4bd50; }
+.mobile-controls .depth-controls { display: flex; flex-direction: column; gap: 3px; }
+.mobile-controls .depth-controls button { width: 31px; height: 31px; font-size: 10px; }
 
 .portrait.ninja { background: radial-gradient(circle at 50% 32%, #4d3041, #121824 68%); }
 .portrait.operator { background: radial-gradient(circle at 50% 32%, #455447, #141b1d 68%); }

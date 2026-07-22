@@ -74,7 +74,7 @@ export default function Game() {
     if (!ctx) return;
 
     const state = {
-      player: { x: campaignLevel*LEVEL_LENGTH+140, y: 390, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
+      player: { x: campaignLevel*LEVEL_LENGTH+140, y: 390, depth:450, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
       jumpHeld: false,
       camera: campaignLevel*LEVEL_LENGTH,
       score: 0,
@@ -84,12 +84,13 @@ export default function Game() {
       obstacles: Array.from({ length: 24 }, (_, i) => {
         const level=Math.floor(i/6);const local=i%6;const kind=LEVELS[level].hazards[local%LEVELS[level].hazards.length];
         const sizes:Record<string,[number,number]>={driftwood:[78,32],sandbags:[70,45],stonewall:[74,58],cart:[78,54],woodpile:[72,48],crate:[58,58],barricade:[82,50],generator:[72,64],boulder:[68,58],lavavent:[62,46],beam:[82,35]};
-        return {x:level*LEVEL_LENGTH+500+local*285+(local%2)*35,kind,w:sizes[kind][0],h:sizes[kind][1]};
+        return {x:level*LEVEL_LENGTH+500+local*285+(local%2)*35,kind,w:sizes[kind][0],h:sizes[kind][1],depth:386+(local%3)*30};
       }),
-      enemies: Array.from({ length: 32 }, (_, i) => {const level=Math.min(3,Math.floor((700+i*270)/LEVEL_LENGTH));return {x:700+i*270,y:407,hp:1+level+(i%7===6?1:0),cooldown:55+(i*17)%70,alive:true,facing:-1,variant:i%4};}),
+      enemies: Array.from({ length: 32 }, (_, i) => {const level=Math.min(3,Math.floor((700+i*270)/LEVEL_LENGTH));const depth=390+(i%3)*28;return {x:700+i*270,y:depth-43,depth,hp:1+level+(i%7===6?1:0),cooldown:55+(i*17)%70,alive:true,facing:-1,variant:[0,1,3,0][i%4]};}),
     };
 
     const animeAtlas=new Image();let atlasReady=false;animeAtlas.onload=()=>{atlasReady=true};animeAtlas.src="sprites/anime-atlas.png";
+    const levelAtlas=new Image();let levelAtlasReady=false;levelAtlas.onload=()=>{levelAtlasReady=true};levelAtlas.src="backgrounds/level-atlas.png";
     const sfx=(frequency:number,duration=.07,type:OscillatorType="square")=>{const audio=audioRef.current;if(!audio)return;const osc=audio.ctx.createOscillator();const gain=audio.ctx.createGain();osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(.35,audio.ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audio.ctx.currentTime+duration);osc.connect(gain).connect(audio.master);osc.start();osc.stop(audio.ctx.currentTime+duration);};
     const cheer=()=>{const audio=audioRef.current;if(!audio)return;const length=Math.floor(audio.ctx.sampleRate*1.4);const buffer=audio.ctx.createBuffer(1,length,audio.ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/length);const source=audio.ctx.createBufferSource();const filter=audio.ctx.createBiquadFilter();const gain=audio.ctx.createGain();filter.type="bandpass";filter.frequency.value=850;filter.Q.value=.45;gain.gain.value=.55;source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.master);source.start();sfx(660,.3,"triangle");sfx(880,.45,"sine");};
 
@@ -99,7 +100,7 @@ export default function Game() {
     const rectHit = (a: {x:number;y:number;w:number;h:number}, b: {x:number;y:number;w:number;h:number}) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 
     const drawHero = (x: number, y: number, facing: number) => {
-      if(atlasReady){const index=HEROES.findIndex(h=>h.id===hero.id);const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;ctx.save();ctx.translate(x+(facing<0?44:0),0);ctx.scale(facing,1);ctx.drawImage(animeAtlas,index*cellW,0,cellW,cellH,-21,y-47,94,108);ctx.restore();return;}
+      if(atlasReady){const index=HEROES.findIndex(h=>h.id===hero.id);const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;const moving=Boolean(keys.current.KeyA||keys.current.KeyD||keys.current.ArrowLeft||keys.current.ArrowRight);const stride=moving?Math.sin(performance.now()/85)*5:0;const bob=moving?Math.abs(Math.sin(performance.now()/85))*2:0;ctx.save();ctx.translate(x+(facing<0?44:0),-bob);ctx.scale(facing,1);ctx.drawImage(animeAtlas,index*cellW,0,cellW,cellH*.7,-21,y-47,94,76);ctx.drawImage(animeAtlas,index*cellW,cellH*.7,cellW/2,cellH*.3,-21+stride,y+29,47,32);ctx.drawImage(animeAtlas,index*cellW+cellW/2,cellH*.7,cellW/2,cellH*.3,26-stride,y+29,47,32);ctx.restore();return;}
       ctx.save(); ctx.translate(x+(facing<0?42:0), y); ctx.scale(facing,1);
       ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(18, 45, 25, 6, 0, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = hero.color; ctx.fillRect(7, 4, 24, 32);
@@ -114,7 +115,7 @@ export default function Game() {
     };
 
     const drawObstacle = (o: typeof state.obstacles[number], x: number) => {
-      const y=450-o.h;ctx.save();ctx.translate(x,y);ctx.lineWidth=3;
+      const y=o.depth-o.h;ctx.save();ctx.translate(x,y);ctx.lineWidth=3;
       if(o.kind==="driftwood"){ctx.strokeStyle="#6f4b33";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(2,25);ctx.lineTo(74,12);ctx.stroke();ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(20,20);ctx.lineTo(10,2);ctx.moveTo(48,17);ctx.lineTo(58,1);ctx.stroke();}
       if(o.kind==="sandbags"){ctx.fillStyle="#a8956b";for(let row=0;row<2;row++)for(let col=0;col<3-row;col++){ctx.beginPath();ctx.ellipse(13+col*23+row*11,34-row*20,14,10,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#645943";ctx.stroke();}}
       if(o.kind==="stonewall"){ctx.fillStyle="#77746d";ctx.fillRect(0,8,74,50);ctx.strokeStyle="#474641";for(let yy=10;yy<58;yy+=16){ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(74,yy);ctx.stroke();for(let xx=(yy%32?18:35);xx<74;xx+=36){ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx,yy+16);ctx.stroke();}}}
@@ -136,6 +137,7 @@ export default function Game() {
       ctx.fillStyle=levelIndex===3?"#ff4a27":"#f6d58a"; ctx.beginPath(); ctx.arc(760,levelIndex===2?70:120,levelIndex===3?70:48,0,Math.PI*2); ctx.fill();
       for (let layer=0; layer<3; layer++) { ctx.fillStyle=levelIndex===0?["#7db5bd","#4f8f9c","#315f6d"][layer]:levelIndex===2?["#2f4242","#263535","#1b292b"][layer]:levelIndex===3?["#5a2025","#401820","#2b121a"][layer]:["#667082","#465268","#2d374b"][layer]; ctx.beginPath(); ctx.moveTo(0,360); for(let x=0;x<=WIDTH;x+=120){ const wx=x+state.camera*(.08+layer*.05); ctx.lineTo(x,(levelIndex===0?335:250)+layer*(levelIndex===0?22:45)+Math.sin(wx*.009)*(levelIndex===0?12:40)); } ctx.lineTo(WIDTH,460); ctx.lineTo(0,460); ctx.fill(); }
       for(let layer=0;layer<2;layer++){const step=layer?118:145;const parallax=layer ? .38 : .24;const shift=-(state.camera*parallax%step);for(let i=-1;i<Math.ceil(WIDTH/step)+1;i++){const n=Math.abs(i+Math.floor(state.camera*parallax/step));const w=65+(n*37%58);const h=85+(n*61%145);const x=shift+i*step;const y=450-h;ctx.fillStyle=layer?"#111723":"#20283c";ctx.fillRect(x,y,w,h);if(n%4===0){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-28);ctx.lineTo(x+w,y);ctx.fill();}if(n%4===1){ctx.fillRect(x+w*.45,y-24,4,24);ctx.fillRect(x+w*.35,y-24,w*.24,4);}ctx.fillStyle=layer?"#d55b43":"#5f6072";for(let wx=x+13;wx<x+w-8;wx+=22)for(let wy=y+20;wy<435;wy+=29)ctx.fillRect(wx,wy,8,9);}}
+      if(levelAtlasReady){const panelW=levelAtlas.width/2;const panelH=levelAtlas.height/2;ctx.drawImage(levelAtlas,(levelIndex%2)*panelW,Math.floor(levelIndex/2)*panelH,panelW,panelH,0,0,WIDTH,HEIGHT);ctx.fillStyle="rgba(8,12,18,.13)";ctx.fillRect(0,350,WIDTH,190);}
       ctx.fillStyle="#272f36"; ctx.fillRect(0,450,WIDTH,90); ctx.fillStyle="#3b4548"; ctx.fillRect(0,450,WIDTH,7);
       if(levelIndex===0){ctx.fillStyle="#c9aa72";ctx.fillRect(0,450,WIDTH,90);ctx.fillStyle="#e8ce91";ctx.fillRect(0,450,WIDTH,7);}if(levelIndex===2){ctx.fillStyle="#202a2d";ctx.fillRect(0,450,WIDTH,90);ctx.strokeStyle="#526064";for(let x=-(state.camera%90);x<WIDTH;x+=90){ctx.strokeRect(x,450,90,90);}ctx.fillStyle="#202a2d";}if(levelIndex===3){ctx.fillStyle="#21181a";ctx.fillRect(0,450,WIDTH,90);ctx.fillStyle="#ff572b";for(let x=-(state.camera*.2%180);x<WIDTH;x+=180)ctx.fillRect(x,515,110,5);}
       for(const o of state.obstacles){const x=o.x-state.camera;if(x>-100&&x<WIDTH+100)drawObstacle(o,x);}
@@ -153,18 +155,19 @@ export default function Game() {
       const p=state.player; const k=keys.current;
       const speed=(k.ShiftLeft||k.ShiftRight)?7:5;
       if(k.KeyD||k.ArrowRight){p.x+=speed*dt;p.facing=1;}if(k.KeyA||k.ArrowLeft){p.x-=speed*dt;p.facing=-1;}
+      if(k.KeyW||k.ArrowUp)p.depth=Math.max(365,p.depth-3.5*dt);if(k.KeyS||k.ArrowDown)p.depth=Math.min(450,p.depth+3.5*dt);if(p.grounded)p.y=p.depth-60;
       const levelStart=campaignLevel*LEVEL_LENGTH;const levelFinish=(campaignLevel+1)*LEVEL_LENGTH;
       p.x=Math.max(levelStart+30,p.x);state.distance=Math.max(state.distance,p.x-levelStart-140);
-      const jumpPressed = Boolean(k.KeyW||k.ArrowUp||k.Space);
+      const jumpPressed = Boolean(k.Space);
       if(jumpPressed&&!state.jumpHeld&&p.jumpsLeft>0){p.vy=-13.5;p.grounded=false;p.jumpsLeft--;burst(p.x+20,p.y+44,hero.accent,5);sfx(p.jumpsLeft?310:430,.08,"sine");}
       state.jumpHeld=jumpPressed;
-      p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=390){p.y=390;p.vy=0;p.grounded=true;p.jumpsLeft=2;}
+      p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=p.depth-60){p.y=p.depth-60;p.vy=0;p.grounded=true;p.jumpsLeft=2;}
       p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?58:-18),y:p.y+4,vx:15*p.facing});p.cooldown=10;sfx(hero.id==="granny"?75:135,.045,"sawtooth");}
       state.camera=Math.max(levelStart,Math.min(levelFinish-WIDTH,p.x-260));
-      for(const o of state.obstacles){const box={x:o.x,y:450-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:48},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
-      for(const e of state.enemies){if(!e.alive)continue;e.facing=p.x<e.x?-1:1;e.cooldown-=dt;if(Math.abs(e.x-p.x)<520&&e.cooldown<=0){const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));state.bullets.push({x:e.x+(e.facing>0?55:-18),y:p.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
+      for(const o of state.obstacles){const box={x:o.x,y:o.depth-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:58},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
+      for(const e of state.enemies){if(!e.alive)continue;e.facing=p.x<e.x?-1:1;e.cooldown-=dt;if(Math.abs(e.x-p.x)<520&&Math.abs(e.depth-p.depth)<38&&e.cooldown<=0){const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));state.bullets.push({x:e.x+(e.facing>0?55:-18),y:e.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
       for(const b of state.bullets)b.x+=b.vx*dt;
-      for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:4},{x:p.x,y:p.y,w:40,h:48})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx(58,.16,"sawtooth");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:14,h:4},{x:e.x,y:e.y,w:34,h:43})){e.hp--;b.x=99999;burst(e.x,e.y+18,"#ffb13b");sfx(220,.05,"square");if(e.hp<=0){e.alive=false;state.score+=100;sfx(95,.18,"sawtooth");}}}}
+      for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:7},{x:p.x-8,y:p.y-25,w:58,h:84})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx(58,.16,"sawtooth");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:16,h:8},{x:e.x-12,y:e.y-32,w:62,h:78})){e.hp--;b.x=99999;burst(e.x,e.y+12,"#ffb13b");sfx(220,.05,"square");if(e.hp<=0){e.alive=false;state.score+=100;sfx(95,.18,"sawtooth");}}}}
       state.bullets=state.bullets.filter(b=>b.x>state.camera-100&&b.x<state.camera+WIDTH+150);
       for(const q of state.particles){q.x+=q.vx;q.y+=q.vy;q.vy+=.2;q.life--;}state.particles=state.particles.filter(q=>q.life>0);
       if(p.hp<=0){setMode("lost");return;}if(p.x>=levelFinish-170){cheer();setMode("celebrate");return;}
@@ -181,6 +184,7 @@ export default function Game() {
       {mode==="playing"&&isMobile&&<div className="mobile-controls" aria-label="Touch game controls">
         <div className="move-controls">
           <button aria-label="Move left" onPointerDown={e=>{e.preventDefault();touchKey("KeyA",true)}} onPointerUp={()=>touchKey("KeyA",false)} onPointerCancel={()=>touchKey("KeyA",false)} onPointerLeave={()=>touchKey("KeyA",false)}>◀</button>
+          <span className="depth-controls"><button aria-label="Move toward background" onPointerDown={e=>{e.preventDefault();touchKey("KeyW",true)}} onPointerUp={()=>touchKey("KeyW",false)} onPointerCancel={()=>touchKey("KeyW",false)}>▲</button><button aria-label="Move toward foreground" onPointerDown={e=>{e.preventDefault();touchKey("KeyS",true)}} onPointerUp={()=>touchKey("KeyS",false)} onPointerCancel={()=>touchKey("KeyS",false)}>▼</button></span>
           <button aria-label="Move right" onPointerDown={e=>{e.preventDefault();touchKey("KeyD",true)}} onPointerUp={()=>touchKey("KeyD",false)} onPointerCancel={()=>touchKey("KeyD",false)} onPointerLeave={()=>touchKey("KeyD",false)}>▶</button>
         </div>
         <div className="action-controls">
@@ -188,10 +192,10 @@ export default function Game() {
           <button className="fire-control" aria-label="Fire weapon" onPointerDown={e=>{e.preventDefault();touchKey("KeyF",true)}} onPointerUp={()=>touchKey("KeyF",false)} onPointerCancel={()=>touchKey("KeyF",false)}>FIRE</button>
         </div>
       </div>}
-      {mode==="select"&&<div className="overlay select"><p className="eyebrow">OPERATIVE SELECT</p><h1>Choose your chaos.</h1><p className="lede">Complete all four missions in order. Each exit unlocks the next combat zone.</p><div className="heroes">{HEROES.map((h,i)=><button key={h.id} className={`hero-card ${hero.id===h.id?"active":""}`} onClick={()=>setHero(h)} style={{"--accent":h.accent} as React.CSSProperties}><span className="portrait anime"><img src="sprites/anime-atlas.png" alt="" style={{left:`-${i*100}%`}} /></span><strong>{h.name}</strong><small>{h.tag}</small><p>{h.bio}</p></button>)}</div><button className="deploy" onClick={start}>START LEVEL 1 <span>→</span></button></div>}
+      {mode==="select"&&<div className="overlay select"><p className="eyebrow">OPERATIVE SELECT</p><h1>Choose your chaos.</h1><p className="lede">Complete all four missions in order. Each exit unlocks the next combat zone.</p><div className="heroes">{HEROES.map(h=><button key={h.id} className={`hero-card ${hero.id===h.id?"active":""}`} onClick={()=>setHero(h)} style={{"--accent":h.accent} as React.CSSProperties}><span className="portrait anime"><img src={`sprites/heroes/${h.id}.png`} alt={`${h.name}, ${h.tag}`} /></span><strong>{h.name}</strong><small>{h.tag}</small><p>{h.bio}</p></button>)}</div><button className="deploy" onClick={start}>START LEVEL 1 <span>→</span></button></div>}
       {mode==="celebrate"&&<div className="overlay celebration"><img className="cheering-crowd" src="sprites/cheering-crowd.png" alt="A cheering crowd celebrating the hero" /><div className="victory-copy"><p className="eyebrow">LEVEL {campaignLevel+1} COMPLETE</p><h1>{LEVELS[campaignLevel].name} secured!</h1><p>The crowd surges forward, cheering {hero.name} on.</p><button className="deploy" onClick={advanceLevel}>{campaignLevel===LEVELS.length-1?"FINISH CAMPAIGN":"ENTER NEXT LEVEL"} <span>→</span></button></div></div>}
       {(mode==="won"||mode==="lost")&&<div className="overlay result"><p className="eyebrow">{mode==="won"?"MISSION COMPLETE":"OPERATIVE DOWN"}</p><h1>{mode==="won"?"Extraction secured.":"The city wins this round."}</h1><button className="deploy" onClick={start}>RUN IT AGAIN <span>↻</span></button><button className="change" onClick={()=>setMode("select")}>CHANGE OPERATIVE</button></div>}
     </section>
-    <footer><div><kbd>A</kbd><kbd>D</kbd><span>MOVE + AIM</span></div><div><kbd>W</kbd><span>DOUBLE JUMP</span></div><div><kbd>F</kbd><span>FIRE</span></div><div><kbd>SHIFT</kbd><span>SPRINT</span></div><p>4 ZONES: BEACH · VILLAGE · BUNKER · VOLCANO</p></footer>
+    <footer><div><kbd>A</kbd><kbd>D</kbd><span>LEFT / RIGHT</span></div><div><kbd>W</kbd><kbd>S</kbd><span>DEPTH</span></div><div><kbd>SPACE</kbd><span>DOUBLE JUMP</span></div><div><kbd>F</kbd><span>FIRE</span></div><p>Align your depth with enemies before firing.</p></footer>
   </main>;
 }
