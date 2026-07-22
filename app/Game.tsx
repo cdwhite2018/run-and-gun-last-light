@@ -27,24 +27,25 @@ export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const frameRef = useRef<number>(0);
   const keys = useRef<Record<string, boolean>>({});
-  const audioRef = useRef<{ctx:AudioContext;master:GainNode;music:OscillatorNode}|null>(null);
+  const audioRef = useRef<{music:HTMLAudioElement|null;fade:number|null;sfx:Set<HTMLAudioElement>}>({music:null,fade:null,sfx:new Set()});
+  const mutedRef = useRef(false);
+  const musicVolumeRef = useRef(.45);
+  const sfxVolumeRef = useRef(.7);
   const [hero, setHero] = useState<Hero>(HEROES[0]);
   const [mode, setMode] = useState<"select" | "playing" | "celebrate" | "won" | "lost">("select");
   const [campaignLevel, setCampaignLevel] = useState(0);
   const [muted, setMuted] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(45);
+  const [sfxVolume, setSfxVolume] = useState(70);
   const [isMobile, setIsMobile] = useState(false);
 
-  const ensureAudio = useCallback(() => {
-    if(audioRef.current){void audioRef.current.ctx.resume();return;}
-    const ctx=new AudioContext();const master=ctx.createGain();master.gain.value=muted?0:.32;master.connect(ctx.destination);
-    const music=ctx.createOscillator();const musicGain=ctx.createGain();music.type="triangle";music.frequency.value=110;musicGain.gain.value=.14;music.connect(musicGain).connect(master);music.start();
-    [440,660,880].forEach((frequency,index)=>{const tone=ctx.createOscillator();const gain=ctx.createGain();tone.type="sine";tone.frequency.value=frequency;gain.gain.setValueAtTime(.001,ctx.currentTime+index*.1);gain.gain.linearRampToValueAtTime(.42,ctx.currentTime+index*.1+.02);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+index*.1+.18);tone.connect(gain).connect(master);tone.start(ctx.currentTime+index*.1);tone.stop(ctx.currentTime+index*.1+.2);});
-    audioRef.current={ctx,master,music};
-  },[muted]);
-  const start = useCallback(() => {ensureAudio();setCampaignLevel(0);setMode("playing");}, [ensureAudio]);
-  const advanceLevel = useCallback(() => {ensureAudio();if(campaignLevel>=LEVELS.length-1)setMode("won");else{setCampaignLevel(level=>level+1);setMode("playing");}},[campaignLevel,ensureAudio]);
+  const playSfx = useCallback((name:string, rate=1) => {const sound=new Audio(`audio/sfx/${name}.wav`);sound.volume=mutedRef.current?0:sfxVolumeRef.current;sound.playbackRate=rate;audioRef.current.sfx.add(sound);sound.onended=()=>audioRef.current.sfx.delete(sound);void sound.play().catch(()=>audioRef.current.sfx.delete(sound));},[]);
+  const transitionMusic = useCallback((level:number) => {const names=["beach","mountain","bunker","volcano"];const old=audioRef.current.music;const next=new Audio(`audio/music/${names[level]}.wav`);next.loop=true;next.preload="auto";next.volume=0;void next.play().catch(()=>{});if(audioRef.current.fade!==null)window.clearInterval(audioRef.current.fade);let step=0;audioRef.current.music=next;audioRef.current.fade=window.setInterval(()=>{step++;const target=mutedRef.current?0:musicVolumeRef.current;next.volume=Math.min(1,target*step/20);if(old)old.volume=Math.max(0,target*(1-step/20));if(step>=20){if(old){old.pause();old.currentTime=0;}if(audioRef.current.fade!==null)window.clearInterval(audioRef.current.fade);audioRef.current.fade=null;}},40);},[]);
+  const start = useCallback(() => {transitionMusic(0);playSfx("cheer",1.25);setCampaignLevel(0);setMode("playing");}, [playSfx,transitionMusic]);
+  const advanceLevel = useCallback(() => {if(campaignLevel>=LEVELS.length-1){audioRef.current.music?.pause();setMode("won");}else{transitionMusic(campaignLevel+1);setCampaignLevel(level=>level+1);setMode("playing");}},[campaignLevel,transitionMusic]);
 
-  useEffect(()=>{if(audioRef.current)audioRef.current.master.gain.value=muted?0:.32;},[muted]);
+  useEffect(()=>{mutedRef.current=muted;const audio=audioRef.current;audio.music&&(audio.music.volume=muted?0:musicVolume/100);audio.sfx.forEach(sound=>sound.volume=muted?0:sfxVolume/100);},[muted,musicVolume,sfxVolume]);
+  useEffect(()=>{musicVolumeRef.current=musicVolume/100;sfxVolumeRef.current=sfxVolume/100;},[musicVolume,sfxVolume]);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -92,8 +93,8 @@ export default function Game() {
     const animeAtlas=new Image();let atlasReady=false;animeAtlas.onload=()=>{atlasReady=true};animeAtlas.src="sprites/anime-atlas.png";
     const levelAtlas=new Image();let levelAtlasReady=false;levelAtlas.onload=()=>{levelAtlasReady=true};levelAtlas.src="backgrounds/level-atlas.png";
     const obstacleAtlas=new Image();let obstacleAtlasReady=false;obstacleAtlas.onload=()=>{obstacleAtlasReady=true};obstacleAtlas.src="sprites/obstacle-atlas.png";
-    const sfx=(frequency:number,duration=.07,type:OscillatorType="square")=>{const audio=audioRef.current;if(!audio)return;const osc=audio.ctx.createOscillator();const gain=audio.ctx.createGain();osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(.35,audio.ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audio.ctx.currentTime+duration);osc.connect(gain).connect(audio.master);osc.start();osc.stop(audio.ctx.currentTime+duration);};
-    const cheer=()=>{const audio=audioRef.current;if(!audio)return;const length=Math.floor(audio.ctx.sampleRate*1.4);const buffer=audio.ctx.createBuffer(1,length,audio.ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/length);const source=audio.ctx.createBufferSource();const filter=audio.ctx.createBiquadFilter();const gain=audio.ctx.createGain();filter.type="bandpass";filter.frequency.value=850;filter.Q.value=.45;gain.gain.value=.55;source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.master);source.start();sfx(660,.3,"triangle");sfx(880,.45,"sine");};
+    const sfx=(name:string,rate=1)=>playSfx(name,rate);
+    const cheer=()=>playSfx("cheer");
 
     const burst = (x: number, y: number, color: string, amount = 8) => {
       for (let i = 0; i < amount; i++) state.particles.push({ x, y, vx: Math.random() * 5 - 2.5, vy: Math.random() * -4, life: 24, color });
@@ -136,7 +137,6 @@ export default function Game() {
 
     const draw = () => {
       const levelIndex=campaignLevel;const level=LEVELS[levelIndex];
-      if(audioRef.current)audioRef.current.music.frequency.setTargetAtTime([110,82,55,41][levelIndex],audioRef.current.ctx.currentTime,.4);
       const sky = ctx.createLinearGradient(0,0,0,HEIGHT); sky.addColorStop(0,level.sky[0]); sky.addColorStop(1,level.sky[1]); ctx.fillStyle=sky; ctx.fillRect(0,0,WIDTH,HEIGHT);
       ctx.fillStyle=levelIndex===3?"#ff4a27":"#f6d58a"; ctx.beginPath(); ctx.arc(760,levelIndex===2?70:120,levelIndex===3?70:48,0,Math.PI*2); ctx.fill();
       for (let layer=0; layer<3; layer++) { ctx.fillStyle=levelIndex===0?["#7db5bd","#4f8f9c","#315f6d"][layer]:levelIndex===2?["#2f4242","#263535","#1b292b"][layer]:levelIndex===3?["#5a2025","#401820","#2b121a"][layer]:["#667082","#465268","#2d374b"][layer]; ctx.beginPath(); ctx.moveTo(0,360); for(let x=0;x<=WIDTH;x+=120){ const wx=x+state.camera*(.08+layer*.05); ctx.lineTo(x,(levelIndex===0?335:250)+layer*(levelIndex===0?22:45)+Math.sin(wx*.009)*(levelIndex===0?12:40)); } ctx.lineTo(WIDTH,460); ctx.lineTo(0,460); ctx.fill(); }
@@ -169,15 +169,15 @@ export default function Game() {
       const levelStart=campaignLevel*LEVEL_LENGTH;const levelFinish=(campaignLevel+1)*LEVEL_LENGTH;
       p.x=Math.max(levelStart+30,p.x);state.distance=Math.max(state.distance,p.x-levelStart-140);
       const jumpPressed = Boolean(k.Space);
-      if(jumpPressed&&!state.jumpHeld&&p.jumpsLeft>0){p.vy=-13.5;p.grounded=false;p.jumpsLeft--;burst(p.x+20,p.y+44,hero.accent,5);sfx(p.jumpsLeft?310:430,.08,"sine");}
+      if(jumpPressed&&!state.jumpHeld&&p.jumpsLeft>0){p.vy=-13.5;p.grounded=false;p.jumpsLeft--;burst(p.x+20,p.y+44,hero.accent,5);sfx("jump",p.jumpsLeft?1:1.25);}
       state.jumpHeld=jumpPressed;
       p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=p.depth-60){p.y=p.depth-60;p.vy=0;p.grounded=true;p.jumpsLeft=2;}
-      p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?58:-18),y:p.y+4,vx:15*p.facing});p.cooldown=10;sfx(hero.id==="granny"?75:135,.045,"sawtooth");}
+      p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?58:-18),y:p.y+4,vx:15*p.facing});p.cooldown=10;sfx("fire",hero.id==="granny"?.78:1);}
       state.camera=Math.max(levelStart,Math.min(levelFinish-WIDTH,p.x-260));
       for(const o of state.obstacles){const box={x:o.x,y:o.depth-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:58},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
-      for(const e of state.enemies){if(!e.alive)continue;const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));const dx=p.x-e.x;e.facing=dx<0?-1:1;e.cooldown-=dt;e.moving=false;if(Math.abs(dx)<720){const groupRush=(Math.floor(now/2800)+e.squad)%4===0;const desiredGap=groupRush?80+(e.squad%3)*24:170+(e.squad%2)*55;let moveX=0;if(Math.abs(dx)>desiredGap)moveX=Math.sign(dx);else if(Math.abs(dx)<90)moveX=-Math.sign(dx);if(moveX){e.x+=moveX*(.7+danger*.13)*dt;e.moving=true;}const depthTarget=Math.max(355,Math.min(510,p.depth+((e.squad%3)-1)*18));const depthDelta=depthTarget-e.depth;if(Math.abs(depthDelta)>3){e.depth+=Math.sign(depthDelta)*(.48+danger*.06)*dt;e.moving=true;}e.x=Math.max(levelStart+70,Math.min(levelFinish-185,e.x));e.depth=Math.max(355,Math.min(510,e.depth));e.y=e.depth-43;}if(Math.abs(e.x-p.x)<520&&Math.abs(e.depth-p.depth)<42&&e.cooldown<=0){state.bullets.push({x:e.x+(e.facing>0?55:-18),y:e.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
+      for(const e of state.enemies){if(!e.alive)continue;const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));const dx=p.x-e.x;e.facing=dx<0?-1:1;e.cooldown-=dt;e.moving=false;if(Math.abs(dx)<720){const groupRush=(Math.floor(now/2800)+e.squad)%4===0;const desiredGap=groupRush?80+(e.squad%3)*24:170+(e.squad%2)*55;let moveX=0;if(Math.abs(dx)>desiredGap)moveX=Math.sign(dx);else if(Math.abs(dx)<90)moveX=-Math.sign(dx);if(moveX){e.x+=moveX*(.7+danger*.13)*dt;e.moving=true;}const depthTarget=Math.max(355,Math.min(510,p.depth+((e.squad%3)-1)*18));const depthDelta=depthTarget-e.depth;if(Math.abs(depthDelta)>3){e.depth+=Math.sign(depthDelta)*(.48+danger*.06)*dt;e.moving=true;}e.x=Math.max(levelStart+70,Math.min(levelFinish-185,e.x));e.depth=Math.max(355,Math.min(510,e.depth));e.y=e.depth-43;}if(Math.abs(e.x-p.x)<520&&Math.abs(e.depth-p.depth)<42&&e.cooldown<=0){state.bullets.push({x:e.x+(e.facing>0?55:-18),y:e.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx("fire",.72+danger*.06);}}
       for(const b of state.bullets)b.x+=b.vx*dt;
-      for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:7},{x:p.x-8,y:p.y-25,w:58,h:84})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx(58,.16,"sawtooth");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:16,h:8},{x:e.x-12,y:e.y-32,w:62,h:78})){e.hp--;b.x=99999;burst(e.x,e.y+12,"#ffb13b");sfx(220,.05,"square");if(e.hp<=0){e.alive=false;state.score+=100;sfx(95,.18,"sawtooth");}}}}
+      for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:7},{x:p.x-8,y:p.y-25,w:58,h:84})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx("damage");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:16,h:8},{x:e.x-12,y:e.y-32,w:62,h:78})){e.hp--;b.x=99999;burst(e.x,e.y+12,"#ffb13b");sfx("impact");if(e.hp<=0){e.alive=false;state.score+=100;sfx("enemy_down");}}}}
       state.bullets=state.bullets.filter(b=>b.x>state.camera-100&&b.x<state.camera+WIDTH+150);
       for(const q of state.particles){q.x+=q.vx;q.y+=q.vy;q.vy+=.2;q.life--;}state.particles=state.particles.filter(q=>q.life>0);
       if(p.hp<=0){setMode("lost");return;}if(p.x>=levelFinish-170){cheer();setMode("celebrate");return;}
@@ -185,10 +185,10 @@ export default function Game() {
     };
     frameRef.current=requestAnimationFrame(loop);
     return()=>cancelAnimationFrame(frameRef.current);
-  },[hero,mode,campaignLevel]);
+  },[hero,mode,campaignLevel,playSfx]);
 
   return <main className="game-shell">
-    <header><div className="brand"><span>R<span>&</span>G</span><div>RUN &amp; GUN<small>LAST LIGHT</small></div></div><button className="sound" onClick={()=>{ensureAudio();setMuted(!muted)}} aria-label="Toggle sound">{muted?"SOUND OFF":"SOUND ON"}</button></header>
+    <header><div className="brand"><span>R<span>&</span>G</span><div>RUN &amp; GUN<small>LAST LIGHT</small></div></div><div className="audio-controls"><label>MUSIC <input aria-label="Music volume" type="range" min="0" max="100" value={musicVolume} onChange={event=>setMusicVolume(Number(event.target.value))}/></label><label>SFX <input aria-label="Sound effects volume" type="range" min="0" max="100" value={sfxVolume} onChange={event=>setSfxVolume(Number(event.target.value))}/></label><button className="sound" onClick={()=>setMuted(!muted)} aria-label="Toggle sound">{muted?"SOUND OFF":"SOUND ON"}</button></div></header>
     <section className="stage-wrap">
       <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} aria-label="Side-scrolling shooter game" />
       {mode==="playing"&&isMobile&&<div className="mobile-controls" aria-label="Touch game controls">
