@@ -29,19 +29,22 @@ export default function Game() {
   const keys = useRef<Record<string, boolean>>({});
   const audioRef = useRef<{ctx:AudioContext;master:GainNode;music:OscillatorNode}|null>(null);
   const [hero, setHero] = useState<Hero>(HEROES[0]);
-  const [mode, setMode] = useState<"select" | "playing" | "won" | "lost">("select");
+  const [mode, setMode] = useState<"select" | "playing" | "celebrate" | "won" | "lost">("select");
+  const [campaignLevel, setCampaignLevel] = useState(0);
   const [muted, setMuted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   const ensureAudio = useCallback(() => {
     if(audioRef.current){void audioRef.current.ctx.resume();return;}
-    const ctx=new AudioContext();const master=ctx.createGain();master.gain.value=muted?0:.13;master.connect(ctx.destination);
-    const music=ctx.createOscillator();const musicGain=ctx.createGain();music.type="triangle";music.frequency.value=55;musicGain.gain.value=.22;music.connect(musicGain).connect(master);music.start();
+    const ctx=new AudioContext();const master=ctx.createGain();master.gain.value=muted?0:.32;master.connect(ctx.destination);
+    const music=ctx.createOscillator();const musicGain=ctx.createGain();music.type="triangle";music.frequency.value=110;musicGain.gain.value=.14;music.connect(musicGain).connect(master);music.start();
+    [440,660,880].forEach((frequency,index)=>{const tone=ctx.createOscillator();const gain=ctx.createGain();tone.type="sine";tone.frequency.value=frequency;gain.gain.setValueAtTime(.001,ctx.currentTime+index*.1);gain.gain.linearRampToValueAtTime(.42,ctx.currentTime+index*.1+.02);gain.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+index*.1+.18);tone.connect(gain).connect(master);tone.start(ctx.currentTime+index*.1);tone.stop(ctx.currentTime+index*.1+.2);});
     audioRef.current={ctx,master,music};
   },[muted]);
-  const start = useCallback(() => {ensureAudio();setMode("playing");}, [ensureAudio]);
+  const start = useCallback(() => {ensureAudio();setCampaignLevel(0);setMode("playing");}, [ensureAudio]);
+  const advanceLevel = useCallback(() => {ensureAudio();if(campaignLevel>=LEVELS.length-1)setMode("won");else{setCampaignLevel(level=>level+1);setMode("playing");}},[campaignLevel,ensureAudio]);
 
-  useEffect(()=>{if(audioRef.current)audioRef.current.master.gain.value=muted?0:.13;},[muted]);
+  useEffect(()=>{if(audioRef.current)audioRef.current.master.gain.value=muted?0:.32;},[muted]);
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -71,9 +74,9 @@ export default function Game() {
     if (!ctx) return;
 
     const state = {
-      player: { x: 140, y: 390, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
+      player: { x: campaignLevel*LEVEL_LENGTH+140, y: 390, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
       jumpHeld: false,
-      camera: 0,
+      camera: campaignLevel*LEVEL_LENGTH,
       score: 0,
       distance: 0,
       bullets: [] as { x: number; y: number; vx: number; enemy?: boolean }[],
@@ -88,6 +91,7 @@ export default function Game() {
 
     const animeAtlas=new Image();let atlasReady=false;animeAtlas.onload=()=>{atlasReady=true};animeAtlas.src="sprites/anime-atlas.png";
     const sfx=(frequency:number,duration=.07,type:OscillatorType="square")=>{const audio=audioRef.current;if(!audio)return;const osc=audio.ctx.createOscillator();const gain=audio.ctx.createGain();osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(.35,audio.ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audio.ctx.currentTime+duration);osc.connect(gain).connect(audio.master);osc.start();osc.stop(audio.ctx.currentTime+duration);};
+    const cheer=()=>{const audio=audioRef.current;if(!audio)return;const length=Math.floor(audio.ctx.sampleRate*1.4);const buffer=audio.ctx.createBuffer(1,length,audio.ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/length);const source=audio.ctx.createBufferSource();const filter=audio.ctx.createBiquadFilter();const gain=audio.ctx.createGain();filter.type="bandpass";filter.frequency.value=850;filter.Q.value=.45;gain.gain.value=.55;source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.master);source.start();sfx(660,.3,"triangle");sfx(880,.45,"sine");};
 
     const burst = (x: number, y: number, color: string, amount = 8) => {
       for (let i = 0; i < amount; i++) state.particles.push({ x, y, vx: Math.random() * 5 - 2.5, vy: Math.random() * -4, life: 24, color });
@@ -126,7 +130,7 @@ export default function Game() {
     };
 
     const draw = () => {
-      const levelIndex=Math.min(3,Math.floor(state.player.x/LEVEL_LENGTH));const level=LEVELS[levelIndex];
+      const levelIndex=campaignLevel;const level=LEVELS[levelIndex];
       if(audioRef.current)audioRef.current.music.frequency.setTargetAtTime([110,82,55,41][levelIndex],audioRef.current.ctx.currentTime,.4);
       const sky = ctx.createLinearGradient(0,0,0,HEIGHT); sky.addColorStop(0,level.sky[0]); sky.addColorStop(1,level.sky[1]); ctx.fillStyle=sky; ctx.fillRect(0,0,WIDTH,HEIGHT);
       ctx.fillStyle=levelIndex===3?"#ff4a27":"#f6d58a"; ctx.beginPath(); ctx.arc(760,levelIndex===2?70:120,levelIndex===3?70:48,0,Math.PI*2); ctx.fill();
@@ -140,7 +144,7 @@ export default function Game() {
       for(const p of state.particles){ctx.globalAlpha=p.life/24;ctx.fillStyle=p.color;ctx.fillRect(p.x-state.camera,p.y,4,4);}ctx.globalAlpha=1;
       drawHero(state.player.x-state.camera,state.player.y,state.player.facing);
       ctx.fillStyle="rgba(9,13,24,.82)";ctx.fillRect(24,22,300,72);ctx.fillStyle="#f4efe3";ctx.font="700 15px Arial";ctx.fillText(hero.name.toUpperCase(),42,48);ctx.fillStyle="#2b343e";ctx.fillRect(42,59,150,12);ctx.fillStyle=state.player.hp>35?"#67e6a4":"#f15d67";ctx.fillRect(42,59,150*Math.max(0,state.player.hp)/100,12);ctx.fillStyle="#f4efe3";ctx.fillText(`${state.score.toString().padStart(5,"0")} PTS`,214,69);
-      ctx.fillStyle="#2b343e";ctx.fillRect(350,34,410,12);ctx.fillStyle=hero.accent;ctx.fillRect(350,34,410*Math.min(1,state.distance/LEVEL_END),12);ctx.fillStyle="#dce2e7";ctx.font="700 12px Arial";ctx.fillText(`LEVEL ${levelIndex+1}: ${level.name.toUpperCase()}`,350,66);ctx.fillText("EXTRACTION",770,45);
+      ctx.fillStyle="#2b343e";ctx.fillRect(350,34,410,12);ctx.fillStyle=hero.accent;ctx.fillRect(350,34,410*Math.min(1,state.distance/(LEVEL_LENGTH-310)),12);ctx.fillStyle="#dce2e7";ctx.font="700 12px Arial";ctx.fillText(`LEVEL ${levelIndex+1}: ${level.name.toUpperCase()}`,350,66);ctx.fillText("LEVEL EXIT",780,45);
     };
 
     let last = performance.now();
@@ -149,25 +153,26 @@ export default function Game() {
       const p=state.player; const k=keys.current;
       const speed=(k.ShiftLeft||k.ShiftRight)?7:5;
       if(k.KeyD||k.ArrowRight){p.x+=speed*dt;p.facing=1;}if(k.KeyA||k.ArrowLeft){p.x-=speed*dt;p.facing=-1;}
-      p.x=Math.max(state.camera+30,p.x);state.distance=Math.max(state.distance,p.x-140);
+      const levelStart=campaignLevel*LEVEL_LENGTH;const levelFinish=(campaignLevel+1)*LEVEL_LENGTH;
+      p.x=Math.max(levelStart+30,p.x);state.distance=Math.max(state.distance,p.x-levelStart-140);
       const jumpPressed = Boolean(k.KeyW||k.ArrowUp||k.Space);
       if(jumpPressed&&!state.jumpHeld&&p.jumpsLeft>0){p.vy=-13.5;p.grounded=false;p.jumpsLeft--;burst(p.x+20,p.y+44,hero.accent,5);sfx(p.jumpsLeft?310:430,.08,"sine");}
       state.jumpHeld=jumpPressed;
       p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=390){p.y=390;p.vy=0;p.grounded=true;p.jumpsLeft=2;}
-      p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?54:-14),y:p.y+20,vx:15*p.facing});p.cooldown=10;sfx(hero.id==="granny"?75:135,.045,"sawtooth");}
-      state.camera=Math.max(0,Math.min(LEVEL_END-WIDTH+200,p.x-260));
+      p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?58:-18),y:p.y+4,vx:15*p.facing});p.cooldown=10;sfx(hero.id==="granny"?75:135,.045,"sawtooth");}
+      state.camera=Math.max(levelStart,Math.min(levelFinish-WIDTH,p.x-260));
       for(const o of state.obstacles){const box={x:o.x,y:450-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:48},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
-      for(const e of state.enemies){if(!e.alive)continue;e.facing=p.x<e.x?-1:1;e.cooldown-=dt;if(Math.abs(e.x-p.x)<520&&e.cooldown<=0){const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));state.bullets.push({x:e.x+(e.facing>0?45:-10),y:p.y+20,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
+      for(const e of state.enemies){if(!e.alive)continue;e.facing=p.x<e.x?-1:1;e.cooldown-=dt;if(Math.abs(e.x-p.x)<520&&e.cooldown<=0){const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));state.bullets.push({x:e.x+(e.facing>0?55:-18),y:p.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
       for(const b of state.bullets)b.x+=b.vx*dt;
       for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:4},{x:p.x,y:p.y,w:40,h:48})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx(58,.16,"sawtooth");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:14,h:4},{x:e.x,y:e.y,w:34,h:43})){e.hp--;b.x=99999;burst(e.x,e.y+18,"#ffb13b");sfx(220,.05,"square");if(e.hp<=0){e.alive=false;state.score+=100;sfx(95,.18,"sawtooth");}}}}
       state.bullets=state.bullets.filter(b=>b.x>state.camera-100&&b.x<state.camera+WIDTH+150);
       for(const q of state.particles){q.x+=q.vx;q.y+=q.vy;q.vy+=.2;q.life--;}state.particles=state.particles.filter(q=>q.life>0);
-      if(p.hp<=0){setMode("lost");return;}if(state.distance>=LEVEL_END-300){setMode("won");return;}
+      if(p.hp<=0){setMode("lost");return;}if(p.x>=levelFinish-170){cheer();setMode("celebrate");return;}
       draw();frameRef.current=requestAnimationFrame(loop);
     };
     frameRef.current=requestAnimationFrame(loop);
     return()=>cancelAnimationFrame(frameRef.current);
-  },[hero,mode]);
+  },[hero,mode,campaignLevel]);
 
   return <main className="game-shell">
     <header><div className="brand"><span>R<span>&</span>G</span><div>RUN &amp; GUN<small>LAST LIGHT</small></div></div><button className="sound" onClick={()=>{ensureAudio();setMuted(!muted)}} aria-label="Toggle sound">{muted?"SOUND OFF":"SOUND ON"}</button></header>
@@ -183,7 +188,8 @@ export default function Game() {
           <button className="fire-control" aria-label="Fire weapon" onPointerDown={e=>{e.preventDefault();touchKey("KeyF",true)}} onPointerUp={()=>touchKey("KeyF",false)} onPointerCancel={()=>touchKey("KeyF",false)}>FIRE</button>
         </div>
       </div>}
-      {mode==="select"&&<div className="overlay select"><p className="eyebrow">OPERATIVE SELECT</p><h1>Choose your chaos.</h1><p className="lede">Four escalating combat zones stand between your operative and extraction.</p><div className="heroes">{HEROES.map((h,i)=><button key={h.id} className={`hero-card ${hero.id===h.id?"active":""}`} onClick={()=>setHero(h)} style={{"--accent":h.accent} as React.CSSProperties}><span className={`portrait anime ${h.id}`} style={{backgroundImage:"url('sprites/anime-atlas.png')",backgroundSize:"400% 200%",backgroundPosition:`${i*33.333}% 0%`}} /><strong>{h.name}</strong><small>{h.tag}</small><p>{h.bio}</p></button>)}</div><button className="deploy" onClick={start}>DEPLOY {hero.name.toUpperCase()} <span>→</span></button></div>}
+      {mode==="select"&&<div className="overlay select"><p className="eyebrow">OPERATIVE SELECT</p><h1>Choose your chaos.</h1><p className="lede">Complete all four missions in order. Each exit unlocks the next combat zone.</p><div className="heroes">{HEROES.map((h,i)=><button key={h.id} className={`hero-card ${hero.id===h.id?"active":""}`} onClick={()=>setHero(h)} style={{"--accent":h.accent} as React.CSSProperties}><span className="portrait anime"><img src="sprites/anime-atlas.png" alt="" style={{left:`-${i*100}%`}} /></span><strong>{h.name}</strong><small>{h.tag}</small><p>{h.bio}</p></button>)}</div><button className="deploy" onClick={start}>START LEVEL 1 <span>→</span></button></div>}
+      {mode==="celebrate"&&<div className="overlay celebration"><img className="cheering-crowd" src="sprites/cheering-crowd.png" alt="A cheering crowd celebrating the hero" /><div className="victory-copy"><p className="eyebrow">LEVEL {campaignLevel+1} COMPLETE</p><h1>{LEVELS[campaignLevel].name} secured!</h1><p>The crowd surges forward, cheering {hero.name} on.</p><button className="deploy" onClick={advanceLevel}>{campaignLevel===LEVELS.length-1?"FINISH CAMPAIGN":"ENTER NEXT LEVEL"} <span>→</span></button></div></div>}
       {(mode==="won"||mode==="lost")&&<div className="overlay result"><p className="eyebrow">{mode==="won"?"MISSION COMPLETE":"OPERATIVE DOWN"}</p><h1>{mode==="won"?"Extraction secured.":"The city wins this round."}</h1><button className="deploy" onClick={start}>RUN IT AGAIN <span>↻</span></button><button className="change" onClick={()=>setMode("select")}>CHANGE OPERATIVE</button></div>}
     </section>
     <footer><div><kbd>A</kbd><kbd>D</kbd><span>MOVE + AIM</span></div><div><kbd>W</kbd><span>DOUBLE JUMP</span></div><div><kbd>F</kbd><span>FIRE</span></div><div><kbd>SHIFT</kbd><span>SPRINT</span></div><p>4 ZONES: BEACH · VILLAGE · BUNKER · VOLCANO</p></footer>
