@@ -45,7 +45,8 @@ export default function Game() {
     if (!ctx) return;
 
     const state = {
-      player: { x: 140, y: 390, vy: 0, hp: 100, grounded: true, cooldown: 0, invuln: 0 },
+      player: { x: 140, y: 390, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0 },
+      jumpHeld: false,
       camera: 0,
       score: 0,
       distance: 0,
@@ -96,8 +97,10 @@ export default function Game() {
       const speed=(k.ShiftLeft||k.ShiftRight)?7:5;
       if(k.KeyD||k.ArrowRight)p.x+=speed*dt;if(k.KeyA||k.ArrowLeft)p.x-=speed*dt;
       p.x=Math.max(state.camera+30,p.x);state.distance=Math.max(state.distance,p.x-140);
-      if((k.KeyW||k.ArrowUp||k.Space)&&p.grounded){p.vy=-13;p.grounded=false;}
-      p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=390){p.y=390;p.vy=0;p.grounded=true;}
+      const jumpPressed = Boolean(k.KeyW||k.ArrowUp||k.Space);
+      if(jumpPressed&&!state.jumpHeld&&p.jumpsLeft>0){p.vy=-13.5;p.grounded=false;p.jumpsLeft--;burst(p.x+20,p.y+44,hero.accent,5);}
+      state.jumpHeld=jumpPressed;
+      p.vy+=.7*dt;p.y+=p.vy*dt;if(p.y>=390){p.y=390;p.vy=0;p.grounded=true;p.jumpsLeft=2;}
       p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+54,y:p.y+20,vx:15});p.cooldown=10;}
       state.camera=Math.max(0,Math.min(LEVEL_END-WIDTH+200,p.x-260));
       for(const o of state.obstacles){const box={x:o.x,y:450-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:48},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
@@ -119,6 +122,6 @@ export default function Game() {
       {mode==="select"&&<div className="overlay select"><p className="eyebrow">OPERATIVE SELECT</p><h1>Choose your chaos.</h1><p className="lede">One ruined city. Four wildly different heroes. Reach extraction.</p><div className="heroes">{HEROES.map(h=><button key={h.id} className={`hero-card ${hero.id===h.id?"active":""}`} onClick={()=>setHero(h)} style={{"--accent":h.accent} as React.CSSProperties}><span className={`portrait ${h.id}`}><i /></span><strong>{h.name}</strong><small>{h.tag}</small></button>)}</div><button className="deploy" onClick={start}>DEPLOY {hero.name.toUpperCase()} <span>→</span></button></div>}
       {(mode==="won"||mode==="lost")&&<div className="overlay result"><p className="eyebrow">{mode==="won"?"MISSION COMPLETE":"OPERATIVE DOWN"}</p><h1>{mode==="won"?"Extraction secured.":"The city wins this round."}</h1><button className="deploy" onClick={start}>RUN IT AGAIN <span>↻</span></button><button className="change" onClick={()=>setMode("select")}>CHANGE OPERATIVE</button></div>}
     </section>
-    <footer><div><kbd>A</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>W</kbd><span>JUMP</span></div><div><kbd>F</kbd><span>FIRE</span></div><div><kbd>SHIFT</kbd><span>SPRINT</span></div><p>TIP: Keep moving. Enemies fire when you enter range.</p></footer>
+    <footer><div><kbd>A</kbd><kbd>D</kbd><span>MOVE</span></div><div><kbd>W</kbd><span>DOUBLE JUMP</span></div><div><kbd>F</kbd><span>FIRE</span></div><div><kbd>SHIFT</kbd><span>SPRINT</span></div><p>TIP: Tap jump again in midair to clear tall obstacles.</p></footer>
   </main>;
 }
