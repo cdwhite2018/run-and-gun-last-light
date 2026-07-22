@@ -19,7 +19,7 @@ def tone(freq, t, shape="sine"):
 
 def soundtrack(name, root, bpm, mood):
     random.seed(root)
-    seconds = 12
+    seconds = 24
     notes = mood
     beat = 60 / bpm
     data = []
@@ -27,23 +27,50 @@ def soundtrack(name, root, bpm, mood):
         t = i / RATE
         step = int(t / (beat / 2)) % len(notes)
         freq = root * (2 ** (notes[step] / 12))
-        env = .45 + .55 * math.exp(-((t % (beat / 2)) / (beat / 2)) * 4)
-        bass = tone(root / 2 * (2 ** (notes[(step // 2) % len(notes)] / 12)), t, "tri") * .23
-        lead = tone(freq, t, "tri") * .20 * env
-        pad = (tone(root * 1.5, t) + tone(root * 2, t)) * .045
+        half = t % (beat / 2)
+        env = math.exp(-half * 8)
+        bass_note = root / 2 * (2 ** (notes[(step // 2) % len(notes)] / 12))
         kick_phase = t % beat
-        kick = math.sin(2 * math.pi * (72 - 45 * kick_phase / beat) * t) * math.exp(-kick_phase * 18) * .22
-        data.append((bass + lead + pad + kick) * .72)
+        kick = math.sin(2 * math.pi * (70 - 35 * kick_phase / beat) * t) * math.exp(-kick_phase * 20)
+        if name == "beach":
+            # Sunny reggae: syncopated bass, offbeat guitar/organ chops, relaxed rim click.
+            off = (t + beat / 2) % beat
+            skank = (tone(freq, t, "tri") + tone(freq * 1.25, t, "tri")) * math.exp(-off * 24) * .18
+            bass = tone(bass_note, t, "tri") * (.16 + .18 * math.exp(-half * 5))
+            rim = (random.random()*2-1) * math.exp(-off*55) * .055
+            sample = bass + skank + rim + kick*.12
+        elif name == "mountain":
+            # Airy folk pulse with a bell-like arpeggio and broad wind pad.
+            bell = (tone(freq*2,t)+tone(freq*3,t)*.25)*env*.14
+            pad = (tone(root,t)+tone(root*1.5,t))*.075
+            sample = bell + pad + tone(bass_note,t,"tri")*.17 + kick*.1
+        elif name == "bunker":
+            # Tight industrial rhythm, mechanical bass and metallic noise ticks.
+            tick = (random.random()*2-1)*env*.13
+            pulse = tone(freq/2,t,"tri")*(.16+.13*env)
+            alarm = tone(root*2,t)*(.035+.02*math.sin(t*.7))
+            sample = pulse + tick + alarm + kick*.28
+        else:
+            # Dark volcanic score: low drone, dissonant movement and heavy toms.
+            drone = tone(root/2,t,"tri")*.24 + tone(root*.75,t)*.085
+            menace = tone(freq,t,"tri")*env*.13
+            rumble = (random.random()*2-1)*.035*(.5+.5*math.sin(t*.33))
+            sample = drone + menace + rumble + kick*.36
+        data.append(sample * .76)
+    fade = int(RATE * .75)
+    for i in range(fade):
+        mix = i / (fade - 1)
+        data[-fade+i] = data[-fade+i] * (1-mix) + data[i] * mix
     write(f"music/{name}.wav", data)
 
 def effect(name, seconds, fn):
     random.seed(name)
     write(f"sfx/{name}.wav", [fn(i / RATE, i / (seconds * RATE)) for i in range(int(seconds * RATE))])
 
-soundtrack("beach", 196, 104, [0, 4, 7, 9, 7, 4, 2, 7])
-soundtrack("mountain", 174, 88, [0, 3, 7, 10, 7, 5, 3, -2])
-soundtrack("bunker", 110, 118, [0, 0, 3, 1, 0, 6, 3, 1])
-soundtrack("volcano", 82, 132, [0, 1, 6, 5, 0, 8, 6, 1])
+soundtrack("beach", 196, 92, [0, 4, 7, 9, 7, 4, 2, 4])
+soundtrack("mountain", 174, 84, [0, 3, 7, 10, 7, 5, 3, -2])
+soundtrack("bunker", 110, 116, [0, 0, 3, 1, 0, 6, 3, 1])
+soundtrack("volcano", 82, 126, [0, 1, 6, 5, 0, 8, 6, 1])
 effect("fire", .11, lambda t, p: (random.random()*2-1)*math.exp(-p*8)*.65 + tone(160-95*p,t,"tri")*math.exp(-p*12))
 effect("jump", .22, lambda t, p: tone(220+520*p,t,"tri")*math.sin(math.pi*p)*.7)
 effect("impact", .16, lambda t, p: (random.random()*2-1)*math.exp(-p*7)*.8)
