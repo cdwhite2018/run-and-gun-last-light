@@ -16,7 +16,7 @@ const WIDTH = 960;
 const HEIGHT = 540;
 const LEVEL_LENGTH = 2200;
 const LEVELS = [
-  { name:"Tidebreak Beach", sky:["#4a91bd","#f0c07a"], hazards:["driftwood","sandbags"] },
+  { name:"Tidebreak Beach", sky:["#4a91bd","#f0c07a"], hazards:["driftwood","sandbags","rescueboard"] },
   { name:"Highland Village", sky:["#5b6e8b","#bd9370"], hazards:["stonewall","cart","woodpile"] },
   { name:"Blacksite Bunker", sky:["#18242a","#35443f"], hazards:["crate","barricade","generator"] },
   { name:"Caldera Zero", sky:["#2b0d18","#b93624"], hazards:["boulder","lavavent","beam"] },
@@ -74,7 +74,7 @@ export default function Game() {
     if (!ctx) return;
 
     const state = {
-      player: { x: campaignLevel*LEVEL_LENGTH+140, y: 390, depth:450, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
+      player: { x: campaignLevel*LEVEL_LENGTH+140, y: 405, depth:465, vy: 0, hp: 100, grounded: true, jumpsLeft: 2, cooldown: 0, invuln: 0, facing: 1 },
       jumpHeld: false,
       camera: campaignLevel*LEVEL_LENGTH,
       score: 0,
@@ -83,14 +83,15 @@ export default function Game() {
       particles: [] as { x: number; y: number; vx: number; vy: number; life: number; color: string }[],
       obstacles: Array.from({ length: 24 }, (_, i) => {
         const level=Math.floor(i/6);const local=i%6;const kind=LEVELS[level].hazards[local%LEVELS[level].hazards.length];
-        const sizes:Record<string,[number,number]>={driftwood:[78,32],sandbags:[70,45],stonewall:[74,58],cart:[78,54],woodpile:[72,48],crate:[58,58],barricade:[82,50],generator:[72,64],boulder:[68,58],lavavent:[62,46],beam:[82,35]};
-        return {x:level*LEVEL_LENGTH+500+local*285+(local%2)*35,kind,w:sizes[kind][0],h:sizes[kind][1],depth:386+(local%3)*30};
+        const sizes:Record<string,[number,number]>={driftwood:[86,48],sandbags:[82,53],rescueboard:[52,88],stonewall:[82,61],cart:[88,68],woodpile:[84,58],crate:[68,64],barricade:[88,61],generator:[78,69],boulder:[76,67],lavavent:[72,64],beam:[88,52]};
+        return {x:level*LEVEL_LENGTH+500+local*285+(local%2)*35,kind,w:sizes[kind][0],h:sizes[kind][1],depth:380+(local%3)*55};
       }),
-      enemies: Array.from({ length: 32 }, (_, i) => {const level=Math.min(3,Math.floor((700+i*270)/LEVEL_LENGTH));const depth=390+(i%3)*28;return {x:700+i*270,y:depth-43,depth,hp:1+level+(i%7===6?1:0),cooldown:55+(i*17)%70,alive:true,facing:-1,variant:[0,1,3,0][i%4]};}),
+      enemies: Array.from({ length: 32 }, (_, i) => {const level=Math.min(3,Math.floor((700+i*270)/LEVEL_LENGTH));const depth=380+(i%3)*55;return {x:700+i*270,y:depth-43,depth,hp:1+level+(i%7===6?1:0),cooldown:55+(i*17)%70,alive:true,facing:-1,variant:[0,1,3,0][i%4],squad:Math.floor(i/3),moving:false};}),
     };
 
     const animeAtlas=new Image();let atlasReady=false;animeAtlas.onload=()=>{atlasReady=true};animeAtlas.src="sprites/anime-atlas.png";
     const levelAtlas=new Image();let levelAtlasReady=false;levelAtlas.onload=()=>{levelAtlasReady=true};levelAtlas.src="backgrounds/level-atlas.png";
+    const obstacleAtlas=new Image();let obstacleAtlasReady=false;obstacleAtlas.onload=()=>{obstacleAtlasReady=true};obstacleAtlas.src="sprites/obstacle-atlas.png";
     const sfx=(frequency:number,duration=.07,type:OscillatorType="square")=>{const audio=audioRef.current;if(!audio)return;const osc=audio.ctx.createOscillator();const gain=audio.ctx.createGain();osc.type=type;osc.frequency.value=frequency;gain.gain.setValueAtTime(.35,audio.ctx.currentTime);gain.gain.exponentialRampToValueAtTime(.001,audio.ctx.currentTime+duration);osc.connect(gain).connect(audio.master);osc.start();osc.stop(audio.ctx.currentTime+duration);};
     const cheer=()=>{const audio=audioRef.current;if(!audio)return;const length=Math.floor(audio.ctx.sampleRate*1.4);const buffer=audio.ctx.createBuffer(1,length,audio.ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<length;i++)data[i]=(Math.random()*2-1)*Math.sin(Math.PI*i/length);const source=audio.ctx.createBufferSource();const filter=audio.ctx.createBiquadFilter();const gain=audio.ctx.createGain();filter.type="bandpass";filter.frequency.value=850;filter.Q.value=.45;gain.gain.value=.55;source.buffer=buffer;source.connect(filter).connect(gain).connect(audio.master);source.start();sfx(660,.3,"triangle");sfx(880,.45,"sine");};
 
@@ -100,7 +101,8 @@ export default function Game() {
     const rectHit = (a: {x:number;y:number;w:number;h:number}, b: {x:number;y:number;w:number;h:number}) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 
     const drawHero = (x: number, y: number, facing: number) => {
-      if(atlasReady){const index=HEROES.findIndex(h=>h.id===hero.id);const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;const moving=Boolean(keys.current.KeyA||keys.current.KeyD||keys.current.ArrowLeft||keys.current.ArrowRight);const stride=moving?Math.sin(performance.now()/85)*5:0;const bob=moving?Math.abs(Math.sin(performance.now()/85))*2:0;ctx.save();ctx.translate(x+(facing<0?44:0),-bob);ctx.scale(facing,1);ctx.drawImage(animeAtlas,index*cellW,0,cellW,cellH*.7,-21,y-47,94,76);ctx.drawImage(animeAtlas,index*cellW,cellH*.7,cellW/2,cellH*.3,-21+stride,y+29,47,32);ctx.drawImage(animeAtlas,index*cellW+cellW/2,cellH*.7,cellW/2,cellH*.3,26-stride,y+29,47,32);ctx.restore();return;}
+      ctx.save();ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(x+20,y+61,28,7,0,0,Math.PI*2);ctx.fill();ctx.restore();
+      if(atlasReady){const index=HEROES.findIndex(h=>h.id===hero.id);const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;const moving=Boolean(keys.current.KeyA||keys.current.KeyD||keys.current.KeyW||keys.current.KeyS||keys.current.ArrowLeft||keys.current.ArrowRight||keys.current.ArrowUp||keys.current.ArrowDown);const stride=moving?Math.sin(performance.now()/85)*5:0;const bob=moving?Math.abs(Math.sin(performance.now()/85))*2:0;ctx.save();ctx.translate(x+(facing<0?44:0),-bob);ctx.scale(facing,1);ctx.drawImage(animeAtlas,index*cellW,0,cellW,cellH*.7,-21,y-47,94,76);ctx.drawImage(animeAtlas,index*cellW,cellH*.7,cellW/2,cellH*.3,-21+stride,y+29,47,32);ctx.drawImage(animeAtlas,index*cellW+cellW/2,cellH*.7,cellW/2,cellH*.3,26-stride,y+29,47,32);ctx.restore();return;}
       ctx.save(); ctx.translate(x+(facing<0?42:0), y); ctx.scale(facing,1);
       ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.beginPath(); ctx.ellipse(18, 45, 25, 6, 0, 0, Math.PI*2); ctx.fill();
       ctx.fillStyle = hero.color; ctx.fillRect(7, 4, 24, 32);
@@ -116,6 +118,8 @@ export default function Game() {
 
     const drawObstacle = (o: typeof state.obstacles[number], x: number) => {
       const y=o.depth-o.h;ctx.save();ctx.translate(x,y);ctx.lineWidth=3;
+      const order=["driftwood","sandbags","rescueboard","stonewall","cart","woodpile","crate","barricade","generator","boulder","lavavent","beam"];
+      const spriteIndex=order.indexOf(o.kind);if(obstacleAtlasReady&&spriteIndex>=0){const cellW=obstacleAtlas.width/3;const cellH=obstacleAtlas.height/4;ctx.drawImage(obstacleAtlas,(spriteIndex%3)*cellW,Math.floor(spriteIndex/3)*cellH,cellW,cellH,0,0,o.w,o.h);ctx.restore();return;}
       if(o.kind==="driftwood"){ctx.strokeStyle="#6f4b33";ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(2,25);ctx.lineTo(74,12);ctx.stroke();ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(20,20);ctx.lineTo(10,2);ctx.moveTo(48,17);ctx.lineTo(58,1);ctx.stroke();}
       if(o.kind==="sandbags"){ctx.fillStyle="#a8956b";for(let row=0;row<2;row++)for(let col=0;col<3-row;col++){ctx.beginPath();ctx.ellipse(13+col*23+row*11,34-row*20,14,10,0,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#645943";ctx.stroke();}}
       if(o.kind==="stonewall"){ctx.fillStyle="#77746d";ctx.fillRect(0,8,74,50);ctx.strokeStyle="#474641";for(let yy=10;yy<58;yy+=16){ctx.beginPath();ctx.moveTo(0,yy);ctx.lineTo(74,yy);ctx.stroke();for(let xx=(yy%32?18:35);xx<74;xx+=36){ctx.beginPath();ctx.moveTo(xx,yy);ctx.lineTo(xx,yy+16);ctx.stroke();}}}
@@ -138,10 +142,16 @@ export default function Game() {
       for (let layer=0; layer<3; layer++) { ctx.fillStyle=levelIndex===0?["#7db5bd","#4f8f9c","#315f6d"][layer]:levelIndex===2?["#2f4242","#263535","#1b292b"][layer]:levelIndex===3?["#5a2025","#401820","#2b121a"][layer]:["#667082","#465268","#2d374b"][layer]; ctx.beginPath(); ctx.moveTo(0,360); for(let x=0;x<=WIDTH;x+=120){ const wx=x+state.camera*(.08+layer*.05); ctx.lineTo(x,(levelIndex===0?335:250)+layer*(levelIndex===0?22:45)+Math.sin(wx*.009)*(levelIndex===0?12:40)); } ctx.lineTo(WIDTH,460); ctx.lineTo(0,460); ctx.fill(); }
       for(let layer=0;layer<2;layer++){const step=layer?118:145;const parallax=layer ? .38 : .24;const shift=-(state.camera*parallax%step);for(let i=-1;i<Math.ceil(WIDTH/step)+1;i++){const n=Math.abs(i+Math.floor(state.camera*parallax/step));const w=65+(n*37%58);const h=85+(n*61%145);const x=shift+i*step;const y=450-h;ctx.fillStyle=layer?"#111723":"#20283c";ctx.fillRect(x,y,w,h);if(n%4===0){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+w/2,y-28);ctx.lineTo(x+w,y);ctx.fill();}if(n%4===1){ctx.fillRect(x+w*.45,y-24,4,24);ctx.fillRect(x+w*.35,y-24,w*.24,4);}ctx.fillStyle=layer?"#d55b43":"#5f6072";for(let wx=x+13;wx<x+w-8;wx+=22)for(let wy=y+20;wy<435;wy+=29)ctx.fillRect(wx,wy,8,9);}}
       if(levelAtlasReady){const panelW=levelAtlas.width/2;const panelH=levelAtlas.height/2;ctx.drawImage(levelAtlas,(levelIndex%2)*panelW,Math.floor(levelIndex/2)*panelH,panelW,panelH,0,0,WIDTH,HEIGHT);ctx.fillStyle="rgba(8,12,18,.13)";ctx.fillRect(0,350,WIDTH,190);}
-      ctx.fillStyle="#272f36"; ctx.fillRect(0,450,WIDTH,90); ctx.fillStyle="#3b4548"; ctx.fillRect(0,450,WIDTH,7);
-      if(levelIndex===0){ctx.fillStyle="#c9aa72";ctx.fillRect(0,450,WIDTH,90);ctx.fillStyle="#e8ce91";ctx.fillRect(0,450,WIDTH,7);}if(levelIndex===2){ctx.fillStyle="#202a2d";ctx.fillRect(0,450,WIDTH,90);ctx.strokeStyle="#526064";for(let x=-(state.camera%90);x<WIDTH;x+=90){ctx.strokeRect(x,450,90,90);}ctx.fillStyle="#202a2d";}if(levelIndex===3){ctx.fillStyle="#21181a";ctx.fillRect(0,450,WIDTH,90);ctx.fillStyle="#ff572b";for(let x=-(state.camera*.2%180);x<WIDTH;x+=180)ctx.fillRect(x,515,110,5);}
+      const time=performance.now()/1000;
+      if(levelIndex===0){ctx.strokeStyle="rgba(225,250,255,.8)";ctx.lineWidth=3;for(let wave=0;wave<3;wave++){ctx.beginPath();for(let x=0;x<=WIDTH;x+=18){const y=300+wave*14+Math.sin(x*.035+time*2+wave)*4;x?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}ctx.strokeStyle="#172c42";ctx.lineWidth=2;for(let bird=0;bird<4;bird++){const bx=(time*28+bird*235)%1100-70,by=80+bird*27;ctx.beginPath();ctx.moveTo(bx,by);ctx.quadraticCurveTo(bx+7,by-7,bx+14,by);ctx.quadraticCurveTo(bx+21,by-7,bx+28,by);ctx.stroke();}ctx.fillStyle="rgba(255,255,255,.55)";for(let cloud=0;cloud<2;cloud++){const cx=(time*13+cloud*530)%1120-80,cy=55+cloud*55;ctx.beginPath();ctx.ellipse(cx,cy,55,15,0,0,Math.PI*2);ctx.ellipse(cx+35,cy-7,35,18,0,0,Math.PI*2);ctx.fill();}}
+      if(levelIndex===1){ctx.fillStyle="rgba(255,255,255,.35)";for(let cloud=0;cloud<3;cloud++){const cx=(time*10+cloud*370)%1120-80;ctx.beginPath();ctx.ellipse(cx,70+cloud*45,62,17,0,0,Math.PI*2);ctx.fill();}}
+      if(levelIndex===2){const blink=(Math.sin(time*6)+1)/2;ctx.fillStyle=`rgba(255,45,35,${.25+blink*.65})`;ctx.beginPath();ctx.arc(145,102,12,0,Math.PI*2);ctx.fill();ctx.strokeStyle="#9eb2b4";ctx.lineWidth=3;ctx.save();ctx.translate(820,112);ctx.rotate(time*3);for(let spoke=0;spoke<4;spoke++){ctx.rotate(Math.PI/2);ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(28,0);ctx.stroke();}ctx.restore();}
+      if(levelIndex===3){for(let ember=0;ember<22;ember++){const ex=(ember*71+time*17)%WIDTH,ey=500-((time*38+ember*31)%310);ctx.fillStyle=ember%2?"#ffb13b":"#ff5a2d";ctx.globalAlpha=.35+(ember%5)*.12;ctx.fillRect(ex,ey,3,6);}ctx.globalAlpha=1;}
+      const laneColors=["rgba(198,164,102,.93)","rgba(86,77,67,.94)","rgba(31,42,45,.96)","rgba(35,24,27,.96)"];
+      ctx.fillStyle=laneColors[levelIndex];ctx.beginPath();ctx.moveTo(95,350);ctx.lineTo(865,350);ctx.lineTo(WIDTH,HEIGHT);ctx.lineTo(0,HEIGHT);ctx.closePath();ctx.fill();
+      ctx.strokeStyle=levelIndex===3?"#e1512f":levelIndex===0?"#eed698":"#778184";ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(95,350);ctx.lineTo(0,HEIGHT);ctx.moveTo(865,350);ctx.lineTo(WIDTH,HEIGHT);ctx.stroke();ctx.globalAlpha=.22;ctx.lineWidth=2;for(let guide=1;guide<4;guide++){const gx=95+(770*guide/4);ctx.beginPath();ctx.moveTo(gx,350);ctx.lineTo(WIDTH*guide/4,HEIGHT);ctx.stroke();}ctx.globalAlpha=1;
       for(const o of state.obstacles){const x=o.x-state.camera;if(x>-100&&x<WIDTH+100)drawObstacle(o,x);}
-      for(const e of state.enemies){if(!e.alive)continue;const x=e.x-state.camera;if(x>-80&&x<WIDTH+80){if(atlasReady){const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;ctx.save();ctx.translate(x+(e.facing<0?38:0),0);ctx.scale(e.facing,1);ctx.drawImage(animeAtlas,e.variant*cellW,cellH,cellW,cellH,-18,e.y-41,82,88);ctx.restore();}else{ctx.save();ctx.translate(x+(e.facing<0?34:0),e.y);ctx.scale(e.facing,1);ctx.fillStyle="#351e29";ctx.fillRect(0,0,34,43);ctx.fillStyle="#8cffcf";ctx.fillRect(5,8,7,4);ctx.fillRect(22,8,7,4);ctx.fillStyle="#bf4859";ctx.fillRect(28,19,21,7);ctx.restore();}}}
+      for(const e of state.enemies){if(!e.alive)continue;const x=e.x-state.camera;if(x>-80&&x<WIDTH+80){ctx.fillStyle="rgba(0,0,0,.3)";ctx.beginPath();ctx.ellipse(x+18,e.depth+3,25,7,0,0,Math.PI*2);ctx.fill();if(atlasReady){const cellW=animeAtlas.width/4;const cellH=animeAtlas.height/2;const stride=e.moving?Math.sin(performance.now()/85+e.squad)*5:0;const bob=e.moving?Math.abs(Math.sin(performance.now()/85+e.squad))*2:0;ctx.save();ctx.translate(x+(e.facing<0?38:0),-bob);ctx.scale(e.facing,1);ctx.drawImage(animeAtlas,e.variant*cellW,cellH,cellW,cellH*.7,-18,e.y-41,82,62);ctx.drawImage(animeAtlas,e.variant*cellW,cellH*1.7,cellW/2,cellH*.3,-18+stride,e.y+21,41,26);ctx.drawImage(animeAtlas,e.variant*cellW+cellW/2,cellH*1.7,cellW/2,cellH*.3,23-stride,e.y+21,41,26);ctx.restore();}else{ctx.save();ctx.translate(x+(e.facing<0?34:0),e.y);ctx.scale(e.facing,1);ctx.fillStyle="#351e29";ctx.fillRect(0,0,34,43);ctx.fillStyle="#8cffcf";ctx.fillRect(5,8,7,4);ctx.fillRect(22,8,7,4);ctx.fillStyle="#bf4859";ctx.fillRect(28,19,21,7);ctx.restore();}}}
       for(const b of state.bullets){ctx.fillStyle=b.enemy?"#ff5973":"#ffd15b";ctx.fillRect(b.x-state.camera,b.y,b.enemy?9:14,4);}
       for(const p of state.particles){ctx.globalAlpha=p.life/24;ctx.fillStyle=p.color;ctx.fillRect(p.x-state.camera,p.y,4,4);}ctx.globalAlpha=1;
       drawHero(state.player.x-state.camera,state.player.y,state.player.facing);
@@ -155,7 +165,7 @@ export default function Game() {
       const p=state.player; const k=keys.current;
       const speed=(k.ShiftLeft||k.ShiftRight)?7:5;
       if(k.KeyD||k.ArrowRight){p.x+=speed*dt;p.facing=1;}if(k.KeyA||k.ArrowLeft){p.x-=speed*dt;p.facing=-1;}
-      if(k.KeyW||k.ArrowUp)p.depth=Math.max(365,p.depth-3.5*dt);if(k.KeyS||k.ArrowDown)p.depth=Math.min(450,p.depth+3.5*dt);if(p.grounded)p.y=p.depth-60;
+      if(k.KeyW||k.ArrowUp)p.depth=Math.max(355,p.depth-3.5*dt);if(k.KeyS||k.ArrowDown)p.depth=Math.min(510,p.depth+3.5*dt);if(p.grounded)p.y=p.depth-60;
       const levelStart=campaignLevel*LEVEL_LENGTH;const levelFinish=(campaignLevel+1)*LEVEL_LENGTH;
       p.x=Math.max(levelStart+30,p.x);state.distance=Math.max(state.distance,p.x-levelStart-140);
       const jumpPressed = Boolean(k.Space);
@@ -165,7 +175,7 @@ export default function Game() {
       p.cooldown-=dt;p.invuln-=dt;if((k.KeyF||k.KeyJ||k.ControlLeft)&&p.cooldown<=0){state.bullets.push({x:p.x+(p.facing>0?58:-18),y:p.y+4,vx:15*p.facing});p.cooldown=10;sfx(hero.id==="granny"?75:135,.045,"sawtooth");}
       state.camera=Math.max(levelStart,Math.min(levelFinish-WIDTH,p.x-260));
       for(const o of state.obstacles){const box={x:o.x,y:o.depth-o.h,w:o.w,h:o.h};if(rectHit({x:p.x,y:p.y,w:40,h:58},box)&&p.invuln<=0){p.hp-=14;p.invuln=45;p.x-=35;burst(p.x,p.y+25,"#ff6579");}}
-      for(const e of state.enemies){if(!e.alive)continue;e.facing=p.x<e.x?-1:1;e.cooldown-=dt;if(Math.abs(e.x-p.x)<520&&Math.abs(e.depth-p.depth)<38&&e.cooldown<=0){const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));state.bullets.push({x:e.x+(e.facing>0?55:-18),y:e.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
+      for(const e of state.enemies){if(!e.alive)continue;const danger=Math.min(3,Math.floor(e.x/LEVEL_LENGTH));const dx=p.x-e.x;e.facing=dx<0?-1:1;e.cooldown-=dt;e.moving=false;if(Math.abs(dx)<720){const groupRush=(Math.floor(now/2800)+e.squad)%4===0;const desiredGap=groupRush?80+(e.squad%3)*24:170+(e.squad%2)*55;let moveX=0;if(Math.abs(dx)>desiredGap)moveX=Math.sign(dx);else if(Math.abs(dx)<90)moveX=-Math.sign(dx);if(moveX){e.x+=moveX*(.7+danger*.13)*dt;e.moving=true;}const depthTarget=Math.max(355,Math.min(510,p.depth+((e.squad%3)-1)*18));const depthDelta=depthTarget-e.depth;if(Math.abs(depthDelta)>3){e.depth+=Math.sign(depthDelta)*(.48+danger*.06)*dt;e.moving=true;}e.x=Math.max(levelStart+70,Math.min(levelFinish-185,e.x));e.depth=Math.max(355,Math.min(510,e.depth));e.y=e.depth-43;}if(Math.abs(e.x-p.x)<520&&Math.abs(e.depth-p.depth)<42&&e.cooldown<=0){state.bullets.push({x:e.x+(e.facing>0?55:-18),y:e.y+4,vx:(7+danger*1.4)*e.facing,enemy:true});e.cooldown=100-danger*16+Math.random()*40;sfx(85+danger*18,.035,"square");}}
       for(const b of state.bullets)b.x+=b.vx*dt;
       for(const b of state.bullets){if(b.enemy&&rectHit({x:b.x,y:b.y,w:9,h:7},{x:p.x-8,y:p.y-25,w:58,h:84})&&p.invuln<=0){p.hp-=10;p.invuln=35;b.x=-999;burst(p.x,p.y+20,"#ff6579");sfx(58,.16,"sawtooth");}if(!b.enemy)for(const e of state.enemies){if(e.alive&&rectHit({x:b.x,y:b.y,w:16,h:8},{x:e.x-12,y:e.y-32,w:62,h:78})){e.hp--;b.x=99999;burst(e.x,e.y+12,"#ffb13b");sfx(220,.05,"square");if(e.hp<=0){e.alive=false;state.score+=100;sfx(95,.18,"sawtooth");}}}}
       state.bullets=state.bullets.filter(b=>b.x>state.camera-100&&b.x<state.camera+WIDTH+150);
