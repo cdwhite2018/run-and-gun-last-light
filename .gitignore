@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Codex local workspace settings
 /.codex/
+
+# Intermediate image-generation sources
+/public/sprites/*-source.png
