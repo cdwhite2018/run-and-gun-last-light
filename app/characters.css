@@ -8,10 +8,48 @@
 
 .hero-card.active p { color: #e5e9ef; }
 
+.hero-card:hover {
+  z-index: 8;
+  transform: translateY(-9px) scale(1.16);
+  box-shadow: 0 14px 30px #000c, 0 0 0 1px var(--accent);
+}
+
+.hero-card:hover .portrait { height: 96px; }
+.hero-card:hover p { color: #f4f6fa; font-size: 10px; }
+
 .portrait {
   border-bottom: 2px solid color-mix(in srgb, var(--accent) 65%, #1d2636);
   box-shadow: inset 0 0 24px #0008;
+  transition: height .18s ease;
 }
+
+.mobile-controls {
+  position: absolute;
+  z-index: 6;
+  inset: auto 18px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+.mobile-controls > div { display: flex; gap: 12px; pointer-events: auto; }
+.mobile-controls button {
+  width: 64px;
+  height: 64px;
+  border: 2px solid #ffffff80;
+  border-radius: 50%;
+  background: #0d1424b8;
+  color: white;
+  box-shadow: inset 0 0 18px #0009, 0 4px 12px #0008;
+  font: 900 12px Arial, sans-serif;
+  user-select: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.mobile-controls button:active { transform: scale(.92); background: #ee4965dd; }
+.mobile-controls .fire-control { width: 76px; height: 76px; border-color: #ff7088; }
+.mobile-controls .jump-control { border-color: #f4bd50; }
 
 .portrait.ninja { background: radial-gradient(circle at 50% 32%, #4d3041, #121824 68%); }
 .portrait.operator { background: radial-gradient(circle at 50% 32%, #455447, #141b1d 68%); }
@@ -27,4 +65,16 @@
   .select { justify-content: flex-start; overflow-y: auto; padding-top: 9%; }
   .hero-card p { min-height: 0; font-size: 8px; }
   .heroes { padding-bottom: 4px; }
+  .hero-card:hover { transform: none; }
+  .hero-card.active { z-index: 3; transform: scale(1.03); }
+  .game-shell { padding-bottom: 4px; }
+  .stage-wrap { min-height: 68vh; }
+  footer { padding: 8px 5px; }
+}
+
+@media (max-width: 720px) and (orientation: landscape) {
+  header { height: 46px; }
+  .stage-wrap { width: min(960px, 100%); min-height: 0; height: calc(100vh - 58px); aspect-ratio: auto; }
+  footer { display: none; }
+  .mobile-controls { inset: auto 24px 16px; }
 }
